@@ -1,0 +1,1 @@
+pip.exe install pycrc pyserial pyinstaller

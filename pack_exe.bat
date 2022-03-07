@@ -1,0 +1,1 @@
+pyinstaller --onefile -n AT_BAND_Check gui.py
