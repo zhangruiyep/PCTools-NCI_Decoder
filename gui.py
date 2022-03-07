@@ -12,11 +12,17 @@ import types
 #from mcuDevice import *
 from enum import Enum
 
+#table 2
 class MT(Enum):
     DATA = 0
     CMD = 1
     RSP = 2
     NTF = 3
+    
+#table 3
+class PBF(Enum):
+    Complete = 0
+    Segment = 1
     
 class GID(Enum):
     Core = 0
@@ -25,7 +31,7 @@ class GID(Enum):
     Proprietary = 0x0F
 
 #mt_dict = {MT.DATA:'Data Packet',MT.CMD:'Command Msg',MT.RSP:'Response Msg',MT.NTF:'Notification Msg'}
-pbf_dict = {0:'Complete',1:'Segment'}
+#pbf_dict = {0:'Complete',1:'Segment'}
 #gid_dict = {0:'Core',1:'RF',2:'NFCEE',15:'Proprietary'}
 core_oid_dict = {0:'RESET',1:'INIT',2:'SET_CONFIG',3:'GET_CONFIG',4:'CONN_CREATE',5:'CONN_CLOSE',6:'CONN_CREDITS',7:'GENERIC_ERROR',8:'INTERFACE_ERROR'}
 rf_oid_dict = {0:'DISCOVER_MAP',1:'SET_LISTEN_MODE_ROUTING',2:'GET_LISTEN_MODE_ROUTING',3:'DISCOVER',4:'DISCOVER_SELECT',5:'INTF_ACTIVE',6:'DEACTIVATE',7:'FIELD_INFO',8:'T3T_POLLING',9:'NFCEE_ACTION',10:'NFCEE_DISCOVERY_REQ',11:'PARAMETER_UPDATE'}
@@ -83,12 +89,12 @@ class Application(ttk.Frame):
         mt = MT((NCIData[0] & 0x70) >> 5)
         #self.resultVar.set("MT:"+mt_dict[mt]+"\n")
         self.resultVar.set("MT:\t"+mt.name+"\n")
-        pbf = (NCIData[0] & 0x10) >> 4
-        self.resultVar.set(self.resultVar.get()+"PBF:\t"+pbf_dict[pbf]+"\n")
+        pbf = PBF((NCIData[0] & 0x10) >> 4)
+        self.resultVar.set(self.resultVar.get()+"PBF:\t"+pbf.name+"\n")
         if mt == MT.DATA:
             #data
             conn_id = NCIData[0] & 0x0f
-            self.resultVar.set(self.resultVar.get()+"Conn ID:\t"+str(conn_id)+"\n")
+            self.resultVar.set(self.resultVar.get()+"Conn ID:\t"+hex(conn_id)+"\n")
             
         else:
             #control
@@ -107,37 +113,59 @@ class Application(ttk.Frame):
                 self.resultVar.set(self.resultVar.get()+"OID:\t"+str(oid)+"\n")
             else:
                 self.resultVar.set(self.resultVar.get()+"OID:\t"+oid_dict[oid]+"\n")
-            
-        
-        payload_len = NCIData[2]
-        self.resultVar.set(self.resultVar.get()+"Payload Len:\t"+str(payload_len)+"\n")
+
         #payload
-        payload_decoded = False
-        if gid == GID.Core:
-            if oid == 0:
-                if mt == MT.CMD:
-                    resetType = NCIData[3]
-                    self.resultVar.set(self.resultVar.get()+"Reset Type:\t"+reset_type_dict[resetType]+"\n")
-                    payload_decoded = True
-                elif mt == MT.RSP:
-                    status = NCIData[3]
-                    version = NCIData[4]
-                    cfgStatus = NCIData[5]
-                    self.resultVar.set(self.resultVar.get()+"Status:\t"+status_dict[status]+"\n")
-                    self.resultVar.set(self.resultVar.get()+"NCI Version:\t"+nci_ver_dict[version]+"\n")
-                    self.resultVar.set(self.resultVar.get()+"Config Status:\t"+config_status_dict[cfgStatus]+"\n")
-                    payload_decoded = True
-                elif mt == MT.NTF:
-                    reason = NCIData[3]
-                    cfgStatus = NCIData[4]
-                    self.resultVar.set(self.resultVar.get()+"Reason Code:\t"+hex(reason)+"\n")
-                    self.resultVar.set(self.resultVar.get()+"Config Status:\t"+config_status_dict[cfgStatus]+"\n")
-                    payload_decoded = True
-
-        if not payload_decoded:
-            self.resultVar.set(self.resultVar.get()+"Payload:\t"+NCIStr[6:]+"\n")
+        self.printPayload(mt, NCIData)
+        #payload_decoded = False
+        #if mt == MT.DATA:
+        #    
+        #if gid == GID.Core:
+        #    if oid == 0:
+        #        if mt == MT.CMD:
+        #            resetType = NCIData[3]
+        #            self.resultVar.set(self.resultVar.get()+"Reset Type:\t"+reset_type_dict[resetType]+"\n")
+        #            payload_decoded = True
+        #        elif mt == MT.RSP:
+        #            status = NCIData[3]
+        #            version = NCIData[4]
+        #            cfgStatus = NCIData[5]
+        #            self.resultVar.set(self.resultVar.get()+"Status:\t"+status_dict[status]+"\n")
+        #            self.resultVar.set(self.resultVar.get()+"NCI Version:\t"+nci_ver_dict[version]+"\n")
+        #            self.resultVar.set(self.resultVar.get()+"Config Status:\t"+config_status_dict[cfgStatus]+"\n")
+        #            payload_decoded = True
+        #        elif mt == MT.NTF:
+        #            reason = NCIData[3]
+        #            cfgStatus = NCIData[4]
+        #            self.resultVar.set(self.resultVar.get()+"Reason Code:\t"+hex(reason)+"\n")
+        #            self.resultVar.set(self.resultVar.get()+"Config Status:\t"+config_status_dict[cfgStatus]+"\n")
+        #            payload_decoded = True
+        #
+        #if not payload_decoded:
+        #    self.resultVar.set(self.resultVar.get()+"Payload:\t"+NCIStr[6:]+"\n")
             
+    def printPayload(self, mt, NCIData):
+        payload_len = NCIData[2]
+        self.printLine("Payload Len:\t"+str(payload_len))
 
+        if mt == MT.DATA:
+            self.printDataPayload(payload_len, NCIData[3:])
+        else:
+            gid = GID(NCIData[0] & 0x0f)
+            oid = OID(NCIData[1] & 0x3f)
+            printCtrlPayload(mt, gid, oid, payload_len, NCIData[3:])
+
+    def printDataPayload(self, pLen, payload):
+        self.resultVar.set(self.resultVar.get()+"Payload:\t")
+        for d in payload:
+            self.resultVar.set(self.resultVar.get()+hex(d)[2:])
+        self.resultVar.set(self.resultVar.get()+"\n")
+        
+    #def printCtrlPayload(self, mt, gid, oid, pLen, payload):
+        
+
+    def printLine(self, line):
+        self.resultVar.set(self.resultVar.get()+line+"\n")
+        
 
 app = Application()
 app.master.title('DAL NCI Decoder V1.2')
